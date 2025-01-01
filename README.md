@@ -1,5 +1,3 @@
-# Project Name
-
 This repository contains implementations of various algorithms and data structures in C.
 
 ## Table of Contents
