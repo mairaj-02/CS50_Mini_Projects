@@ -4,6 +4,8 @@ import sys
 import cv2 as cv
 import numpy as np
 from moviepy import VideoFileClip
+import librosa
+import soundfile as sf
 
 
 
@@ -61,7 +63,7 @@ def main():
             video.extract_image_part()
             video.extract_audio_part()
             ascii_frames = change_frames_to_ascii(video._image_part)
-            changed_audio = change_audio(video._audio_part)
+            changed_audio = change_audio(video._audio_part, video.sr)
             combine_audio_and_frames(ascii_frames, changed_audio)
             
         else:
@@ -106,11 +108,34 @@ def change_frames_to_ascii(frames):
         ascii_frames.append(lines)
     return ascii_frames
 
+# define the function that changes the pitch of the audio as per the desire of the user
+def change_pitch(audio, sr, semitones):
+    alpha = 2 ** (semitones / 12)
+    streched_length = librosa.effects.time_stretch(audio, rate=alpha)
+    target_sr = int(sr * alpha)
+    resampled_audio = librosa.resample(streched_length, orig_sr=target_sr, target_sr=sr)
+    if len(resampled_audio) > len(audio):
+        resampled_audio = resampled_audio[:len(audio)]
+    else:
+        resampled_audio = np.pad(resampled_audio, (0, len(audio) - len(resampled_audio)))
+    return resampled_audio
+
+# define the function that adds the robotic effect to the audio
+def add_robotic_effect(audio, sr, freq=40):
+    t = np.arange(len(audio)) / sr
+    carrier = np.sin(2 * np.pi * freq * t)
+    modulated_audio = audio * carrier
+    return np.clip(modulated_audio, -1, 1)
 
 # define the functions that changes the audio of the video as per the desire of the user
-def change_audio(audio):
-    # code to change the audio of the video as per the desire of the user
-    pass
+def change_audio(audio, sr):
+    if audio is None:
+        print("No audio to modify.")
+        return None
+    
+    deep_pitch_audio = change_pitch(audio, sr, semitones=-4) # lower the pitch by 4 semitones
+    robotic_audio = add_robotic_effect(deep_pitch_audio, sr, freq=40) # add robotic effect
+    return robotic_audio
 
 # define a function that combines the changed audio and the ASCII frames to create a new video file
 def combine_audio_and_frames(ascii_frames, changed_audio):
