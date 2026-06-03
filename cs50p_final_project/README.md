@@ -1,151 +1,82 @@
-# Video-to-ASCII & Audio Manipulation
+# Audio & Image Processor
 
-A single-file Python tool that takes a short video clip (.mov or .mp4, ≤15 s), converts each frame to ASCII art, and manipulates the audio track (pitch, volume, speed). The output is a playable ASCII-rendered video with the modified audio.
+#### Video Demo:  <URL HERE>
 
----
+A Python CLI tool that does two things:
 
-## What It Does
-
-1. **ASCII Art Video** — extracts frames, downsamples, maps pixel brightness to ASCII characters, and plays the result in the terminal (or saves as text).
-2. **Audio Manipulation** — extracts the audio track, applies pitch shifting, volume scaling, and speed changes, then recombines with the ASCII video.
+1. **Image → ASCII Art** — converts any image to ASCII characters and prints it to the terminal
+2. **Audio → Robotic Voice** — lowers the pitch and adds a ring modulation effect to any audio file
 
 ---
 
-## Project Files
-
-```
-project.py           ← everything: I/O, ASCII conversion, audio ops, CLI
-test_project.py      ← all tests
-```
-
-That's it. No packages, no submodules, no registry.
-
----
-
-## Project Structure Inside `project.py`
-
-The file is organised into four sections:
-
-| Section | Functions | What it does |
-|---|---|---|
-| **Video I/O** | `extract_frames()`, `get_video_info()`, `save_ascii_video()` | Reads .mov/.mp4 via OpenCV, returns frames as numpy arrays; writes ASCII frames to text file |
-| **ASCII Conversion** | `frame_to_ascii()`, `brightness_to_char()`, `play_ascii_video()` | Downsamples frame, converts grayscale brightness to ASCII character set, plays in terminal |
-| **Audio Manipulation** | `extract_audio()`, `shift_pitch()`, `change_volume()`, `change_speed()`, `save_audio()` | Extracts audio via moviepy, modifies pitch/volume/speed via librosa & numpy, saves via soundfile |
-| **CLI** | `main()` | argparse entry point — ties it all together |
-
----
-
-## Mathematical Background
-
-### ASCII Art Conversion
-
-Each video frame is a 3-channel BGR image of shape (H, W, 3) with values in [0, 255]. Conversion to ASCII art follows three steps:
-
-**1. Grayscale conversion**
-
-A single luminance value per pixel is computed as a weighted sum of the colour channels, matching human brightness perception:
-
-L = 0.299·R + 0.587·G + 0.114·B
-
-OpenCV's `cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)` applies this internally.
-
-**2. Downscaling**
-
-A frame of size (H, W) is resized to (new_h, new_w) where `new_w` determines the ASCII art width and `new_h = new_w * (H/W) * 0.55` — the 0.55 factor compensates for the fact that monospace terminal characters are roughly twice as tall as they are wide. Without this correction, ASCII output appears vertically stretched. Resizing uses `cv2.resize()` with `INTER_AREA` interpolation, which averages pixel neighbourhoods and is optimal for downscaling (anti-aliasing).
-
-**3. Brightness-to-character mapping**
-
-The 8-bit grayscale value [0, 255] is mapped to a character from a ramp ordered by visual density:
-
-```
-ASCII_RAMP = " .:-=+*#%@"
-```
-
-Index = round(L / 255 × (len(RAMP) - 1)). A pixel at L=0 maps to space (black/background), L=255 maps to `@` (densest character). The ramp length determines tonal resolution — 10 characters gives ~25 levels of distinguishable brightness on a terminal, which is sufficient for small ASCII art.
-
-### Pitch Shifting
-
-Pitch shifting raises or lowers the perceived frequency of the audio without changing its duration. The time-stretch + resample method works as follows:
-
-1. **Time-stretch** the signal by a factor α = 2^(n_steps/12), where n_steps is the shift in semitones. This changes duration by α but preserves frequency relationships. librosa's `time_stretch` uses a phase vocoder: it computes the STFT, interpolates the phase between frames to maintain coherence at the new hop rate, then inverse-transforms.
-
-2. **Resample** back to the original length using `librosa.resample()`, which applies a polyphase FIR anti-aliasing filter. This restores the original duration while the frequency content has been scaled by α.
-
-The net effect: a signal at frequency f₀ is shifted to f₀ × α. For n_steps = +12 (one octave up), α = 2, so all frequencies double.
-
-### Volume Scaling
-
-Amplitude scaling is a direct multiplication: y_out[n] = G · y_in[n], where G is the gain factor. A gain of 2.0 doubles the amplitude (+6 dB); 0.5 halves it (-6 dB). The relationship between linear gain and decibels is:
-
-G_lin = 10^(G_dB / 20)
-
-After scaling, the signal is clipped to [-1.0, 1.0] to prevent wraparound distortion when saving to 16-bit PCM.
-
-### Speed Change
-
-Speed change is a resampling operation: to play the audio at k× speed, the signal is resampled from sr to sr/k. This shortens the duration by factor k and shifts all frequencies up by factor k (the "chipmunk" effect). Unlike pitch shifting, speed change alters both tempo and pitch simultaneously.
-
-`librosa.resample(y, orig_sr=sr, target_sr=int(sr / k))` applies a polyphase FIR filter for anti-aliasing before decimation, preventing spectral images from folding into the audible range.
-
----
-
-## CLI Usage
+## How to Run
 
 ```bash
-# ASCII art video only (no audio changes)
-python project.py input.mp4 --ascii --width 80
-
-# Pitch shift up 5 semitones
-python project.py input.mp4 --pitch 5
-
-# Double the volume
-python project.py input.mp4 --volume 2.0
-
-# Play at 1.5× speed
-python project.py input.mp4 --speed 1.5
-
-# All combined: ASCII + pitch + volume
-python project.py input.mp4 --ascii --width 100 --pitch -3 --volume 1.5
-
-# Save ASCII frames to file instead of playing
-python project.py input.mp4 --ascii --width 80 --save-ascii output.txt
+python project.py
 ```
+
+You'll see:
+
+```
+Press 1 for Image to ASCII, Press 2 for Audio to Robotic:
+```
+
+### Option 1: Image to ASCII
+
+Enter the path to a `.jpg`, `.jpeg`, or `.png` file. The program converts it to ASCII art and prints it in the terminal.
+
+### Option 2: Audio to Robotic
+
+Enter the path to a `.wav`, `.mp3`, or `.m4a` file. The program lowers the pitch by 4 semitones, adds a 40 Hz ring modulation effect, and saves the result as `changed.wav`.
+
+---
+
+## Supported Formats
+
+| Type | Extensions |
+|---|---|
+| Image | `.jpg`, `.jpeg`, `.png` |
+| Audio | `.wav`, `.mp3`, `.m4a` |
 
 ---
 
 ## Dependencies
 
-```
-numpy>
-opencv-python
-moviepy
-librosa
-soundfile
-```
-
-Install all at once:
+Go to `requirements.txt` to see the names of libraries needed, for installing them run the following command:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements
 ```
+
+---
+
+## How It Works
+
+### Image to ASCII
+
+1. Convert the image to grayscale
+2. Downscale to 80 characters wide (with 0.55 height correction for terminal aspect ratio)
+3. Map each pixel's brightness [0–255] to a character from the ramp `" .',:;clxkO0KXNW@"`
+
+### Audio to Robotic
+
+1. **Pitch shift** — time-stretch the audio by α = 2^(-4/12), then resample back
+2. **Ring modulation** — multiply the audio by a 40 Hz sinusoid, creating sidebands at f₀ ± 40 Hz around every frequency component. This produces the metallic/robotic character
 
 ---
 
 ## Testing
 
 ```bash
+pip install pytest
 python -m pytest test_project.py -v
 ```
 
-`test_project.py` generates a tiny synthetic video fixture programmatically (no external files needed) and tests:
+---
 
-| Test | What it verifies |
-|---|---|
-| `test_grayscale_conversion` | BGR frame → grayscale produces correct shape and value range |
-| `test_ascii_output_dimensions` | ASCII frame has the requested width and proportionally correct height |
-| `test_brightness_mapping` | Black pixel → space, white pixel → densest character |
-| `test_volume_scaling` | Gain=2.0 doubles amplitude (within clipping) |
-| `test_pitch_shift_preserves_length` | Pitch-shifted audio has same number of samples as input |
-| `test_speed_change_length` | 2× speed produces half the samples |
-| `test_frame_extraction` | Extracted frame count matches video frame count |
-| `test_ascii_play_no_crash` | ASCII playback runs without error on a 3-frame video |
+## Project Files
+
+```
+project.py         ← all code
+test_project.py    ← all tests
+```
